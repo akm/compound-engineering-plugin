@@ -230,7 +230,7 @@ This command takes a work document (plan, specification, or todo file) and execu
 
    🤖 Generated with [MODEL] via [HARNESS](HARNESS_URL) + Compound Engineering v[VERSION]
 
-   Co-Authored-By: [MODEL] <noreply@anthropic.com>
+   Co-Authored-By: [MODEL] ([CONTEXT] context, [THINKING]) <noreply@anthropic.com>
    EOF
    )"
    ```
@@ -239,7 +239,11 @@ This command takes a work document (plan, specification, or todo file) and execu
 
    | Placeholder | Value | Example |
    |-------------|-------|---------|
-   | `[MODEL]` | Your model name | Claude Opus 4.6, GPT-5.4 |
+   | Placeholder | Value | Example |
+   |-------------|-------|---------|
+   | `[MODEL]` | Model name | Claude Opus 4.6, GPT-5.4 |
+   | `[CONTEXT]` | Context window (if known) | 200K, 1M |
+   | `[THINKING]` | Thinking level (if known) | extended thinking |
    | `[HARNESS]` | Tool running you | Claude Code, Codex, Gemini CLI |
    | `[HARNESS_URL]` | Link to that tool | `https://claude.com/claude-code` |
    | `[VERSION]` | `plugin.json` → `version` | 2.40.0 |
