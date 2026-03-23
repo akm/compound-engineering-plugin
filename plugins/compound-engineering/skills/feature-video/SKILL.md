@@ -14,12 +14,12 @@ Record browser interactions demonstrating a feature, stitch screenshots into an 
 - `agent-browser` CLI installed (load the `agent-browser` skill for details)
 - `ffmpeg` installed (for video conversion)
 - `gh` CLI authenticated with push access to the repo
-- Git repository with a PR to document
+- Git repository on a feature branch (PR optional -- skill can create a draft or record-only)
 - One-time GitHub browser auth (see Step 6 auth check)
 
 ## Main Tasks
 
-### 1. Parse Arguments
+### 1. Parse Arguments & Resolve PR
 
 **Arguments:** $ARGUMENTS
 
@@ -27,9 +27,29 @@ Parse the input:
 - First argument: PR number or "current" (defaults to current branch's PR)
 - Second argument: Base URL (defaults to `http://localhost:3000`)
 
+Check if a PR exists for the current branch:
+
 ```bash
 gh pr view --json number -q '.number'
 ```
+
+If no PR exists, ask the user how to proceed. **Use the platform's blocking question tool** (`AskUserQuestion` in Claude Code, `request_user_input` in Codex, `ask_user` in Gemini):
+
+```
+No PR found for the current branch.
+
+1. Create a draft PR now and continue (recommended)
+2. Record video only -- save locally and upload later when a PR exists
+3. Cancel
+```
+
+If option 1: create a draft PR with a placeholder title derived from the branch name, then continue with the new PR number:
+
+```bash
+gh pr create --draft --title "[branch-name-humanized]" --body "Draft PR for video walkthrough"
+```
+
+If option 2: proceed through Steps 2-5 (record and encode), skip Steps 6-7 (upload and PR update), and report the local video path at the end. The user can re-run the skill after creating a PR to upload.
 
 ### 2. Gather Feature Context
 
@@ -279,6 +299,6 @@ PR description updated with demo section.
 | `agent-browser: command not found` | agent-browser not installed | Load the `agent-browser` skill for installation instructions |
 | Textarea empty after upload wait | Session expired, or GitHub processing slow | Check session validity (Step 6 auth check). If valid, increase wait time and retry. |
 | Textarea empty, URL is `github.com/login` | Session expired | Re-run auth setup (Step 6) |
-| `gh pr view` fails | No PR for current branch | Create a PR first with `gh pr create` or specify a PR number explicitly |
+| `gh pr view` fails | No PR for current branch | Step 1 handles this -- choose to create a draft PR or record-only mode |
 | Video file too large for upload | Exceeds GitHub's 10MB (free) or 100MB (paid) limit | Re-encode: lower framerate (`-framerate 0.33`), reduce resolution (`scale=960:-2`), or increase CRF (`-crf 28`) |
 | Upload URL does not contain `user-attachments/assets/` | Wrong upload method or GitHub change | Verify the file input selector is still correct by inspecting the PR page |
