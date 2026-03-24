@@ -102,7 +102,7 @@ Three proven review approaches provide the behavioral foundation for specific pe
 
 - **Agents, not inline prompts**: Persona reviewers are implemented as agent files under `agents/review/`. This enables parallel dispatch via Task tool, follows established patterns, and keeps the SKILL.md focused on orchestration. (Resolves deferred question from origin)
 
-- **Structured output contract with per-persona calibration**: Each persona returns findings in a consistent structure (title, priority, section, why_it_matters, confidence, evidence, suggestion). Each persona defines its own confidence calibration and suppress conditions. The orchestrator uses priority + confidence + action type for synthesis. Adapts the iterative-engineering findings schema pattern. (Resolves deferred question from origin -- output format)
+- **Structured output contract aligned with ce:review-beta (PR #348)**: Same normalization mechanism -- findings-schema.json, subagent-template.md, review-output-template.md as reference files. Same field names and enums where applicable (severity P0-P3, autofix_class, owner, confidence, evidence). Document-specific adaptations: `section` replaces `file`+`line`, `deferred_questions` replaces `testing_gaps`, drop `pre_existing`. Each persona defines its own confidence calibration and suppress conditions. (Resolves deferred question from origin -- output format)
 
 - **Content-based activation heuristics**: The orchestrator skill checks the document for keyword and structural patterns to select conditional personas. Heuristics are defined in the skill, not in the agents -- this keeps selection logic centralized and agents focused on review. (Resolves deferred question from origin)
 
@@ -121,7 +121,7 @@ Three proven review approaches provide the behavioral foundation for specific pe
 - **Agent category**: Place under `agents/review/` alongside existing code review agents. Names are distinct (coherence-reviewer, feasibility-reviewer, etc.) and don't conflict with existing agents. Fully-qualified: `compound-engineering:review:<name>`.
 - **Parallel vs serial dispatch**: Always parallel. We have 2-6 agents per run (under the auto-serial threshold of 5 from ce:review's pattern). Even at max (6), these are document reviewers with bounded scope.
 - **Review pattern integration**: Premise challenge -> product-lens opener. Dimensional rating -> design-lens evaluation method. Existing-code audit -> scope-guardian opener. These are incorporated as agent behavior, not separate orchestration mechanisms.
-- **Output format**: Adopt iterative-engineering's structured findings model (title, priority, section, confidence, evidence, suggestion) with compound-engineering additions (action type: auto-fix/present, why_it_matters). Define the schema inline in SKILL.md rather than as a separate JSON file -- keeps the skill self-contained.
+- **Output format**: Align with ce:review-beta (PR #348) normalization pattern. Same mechanism: JSON schema reference file, shared subagent template, output template. Same enums (P0-P3 severity, autofix_class, owner). Document-specific field swaps: `section` replaces `file`+`line`, `deferred_questions` replaces `testing_gaps`, drop `pre_existing`.
 
 ### Deferred to Implementation
 
@@ -146,32 +146,61 @@ Document Review Pipeline Flow:
 5. DISPATCH agents in parallel via Task tool
    - Always: coherence-reviewer, feasibility-reviewer
    - Conditional: activated personas from step 3
-   - Each receives: document content, path, type, output schema
-6. COLLECT findings from all agents
+   - Each receives: subagent-template.md populated with persona + schema + doc content
+6. COLLECT findings from all agents (validate against findings-schema.json)
 7. SYNTHESIZE
-   a. Validate: check structure compliance, drop malformed
+   a. Validate: check structure compliance against schema, drop malformed
    b. Confidence gate: suppress findings below 0.50
-   c. Deduplicate: fingerprint matching, keep highest priority/confidence
+   c. Deduplicate: fingerprint matching, keep highest severity/confidence
    d. Promote residual concerns: corroborated or blocking -> promote to finding
-   e. Resolve contradictions: conflicting personas -> combined finding, action: present
-   f. Classify action: auto-fix (quality) vs present (strategic)
-8. AUTO-FIX quality issues (edit document inline, single pass)
-9. PRESENT strategic questions to user, grouped by priority
-10. OFFER next action: "Refine again" or "Review complete"
+   e. Resolve contradictions: conflicting personas -> combined finding, manual + human
+   f. Route: safe_auto -> apply, everything else -> present
+8. APPLY safe_auto fixes (edit document inline, single pass)
+9. PRESENT remaining findings to user, grouped by severity
+10. FORMAT output using review-output-template.md
+11. OFFER next action: "Refine again" or "Review complete"
 ```
 
-**Finding structure (directional):**
+**Finding structure (aligned with ce:review-beta PR #348):**
 
 ```
-title:           Short issue title (<=10 words)
-priority:        HIGH / MEDIUM / LOW
-section:         Document section where issue appears
-why_it_matters:  Impact statement (what goes wrong if not addressed)
-confidence:      0.0-1.0 (calibrated per persona)
-evidence:        Quoted text from document (minimum 1)
-action:          auto-fix / present
-suggestion:      Optional concrete fix (omit if not obvious)
-reviewer:        Persona that generated the finding
+Envelope (per persona):
+  reviewer:            Persona name (e.g., "coherence", "product-lens")
+  findings:            Array of finding objects
+  residual_risks:      Risks noticed but not confirmed as findings
+  deferred_questions:  Questions that should be resolved in a later workflow stage
+
+Finding object:
+  title:               Short issue title (<=10 words)
+  severity:            P0 / P1 / P2 / P3  (same scale as ce:review-beta)
+  section:             Document section where issue appears (replaces file+line)
+  why_it_matters:      Impact statement (what goes wrong if not addressed)
+  autofix_class:       safe_auto / gated_auto / manual / advisory
+  owner:               review-fixer / downstream-resolver / human / release
+  requires_verification: Whether fix needs re-review
+  suggested_fix:       Optional concrete fix (null if not obvious)
+  confidence:          0.0-1.0 (calibrated per persona)
+  evidence:            Quoted text from document (minimum 1)
+
+Severity definitions (same as ce:review-beta):
+  P0: Contradictions or gaps that would cause building the wrong thing. Must fix.
+  P1: Significant gap likely hit during planning/implementation. Should fix.
+  P2: Moderate issue with meaningful downside. Fix if straightforward.
+  P3: Minor improvement. User's discretion.
+
+Autofix classes (same enum as ce:review-beta for schema compatibility):
+  safe_auto:  Terminology fix, formatting, cross-reference -- local and deterministic
+  gated_auto: Restructure or edit that changes document meaning -- needs approval
+  manual:     Strategic question requiring user judgment -- becomes residual work
+  advisory:   Informational finding -- surface in report only
+
+Orchestrator routing (document review simplification):
+  The 4-class enum is preserved for schema compatibility with ce:review-beta,
+  but the orchestrator routes as 2 buckets:
+    safe_auto           -> apply automatically
+    gated_auto + manual + advisory -> present to user
+  The gated/manual/advisory distinction is blurry for documents (all need user
+  judgment). Personas still classify precisely; the orchestrator collapses.
 ```
 
 ## Implementation Units
@@ -189,8 +218,9 @@ reviewer:        Persona that generated the finding
 - Create: `plugins/compound-engineering/agents/review/feasibility-reviewer.md`
 
 **Approach:**
-- Follow existing agent structure: frontmatter (name, description, model: inherit), examples block, role definition, analysis protocol, output format
-- Each agent defines: role identity, analysis protocol, confidence calibration, suppress conditions, and output format
+- Follow existing agent structure: frontmatter (name, description, model: inherit), examples block, role definition, analysis protocol
+- Each agent defines: role identity, analysis protocol, confidence calibration, and suppress conditions
+- Agents do NOT define their own output format -- the shared `references/findings-schema.json` and `references/subagent-template.md` handle output normalization (same pattern as ce:review-beta PR #348)
 
 **coherence-reviewer:**
 - Role: Technical editor who reads for internal consistency
@@ -222,8 +252,8 @@ reviewer:        Persona that generated the finding
 
 **Verification:**
 - Both agents have valid frontmatter (name, description, model: inherit)
-- Both agents include examples, role definition, analysis protocol, confidence calibration, suppress conditions, and structured output format
-- Output format includes all fields from the finding structure
+- Both agents include examples, role definition, analysis protocol, confidence calibration, and suppress conditions
+- Agents rely on shared findings-schema.json for output normalization (no per-agent output format)
 - Suppress conditions are explicit and sensible for each persona's domain
 
 ---
@@ -243,7 +273,7 @@ reviewer:        Persona that generated the finding
 - Create: `plugins/compound-engineering/agents/review/scope-guardian-reviewer.md`
 
 **Approach:**
-All four use the same structure established in Unit 1 (frontmatter, examples, role, protocol, confidence calibration, suppress conditions, output format).
+All four use the same structure established in Unit 1 (frontmatter, examples, role, protocol, confidence calibration, suppress conditions). Output normalization handled by shared reference files.
 
 **product-lens-reviewer:**
 - Role: Senior product leader evaluating whether the plan solves the right problem
@@ -300,7 +330,7 @@ All four use the same structure established in Unit 1 (frontmatter, examples, ro
 - design-lens-reviewer includes the "rate 0-10, describe what 10 looks like" evaluation pattern
 - scope-guardian-reviewer includes the "what already exists?" opening check
 - All agents define confidence calibration and suppress conditions
-- All agents use the shared structured output format
+- All agents rely on shared findings-schema.json for output normalization
 
 ---
 
@@ -314,8 +344,16 @@ All four use the same structure established in Unit 1 (frontmatter, examples, ro
 
 **Files:**
 - Modify: `plugins/compound-engineering/skills/document-review/SKILL.md`
+- Create: `plugins/compound-engineering/skills/document-review/references/findings-schema.json`
+- Create: `plugins/compound-engineering/skills/document-review/references/subagent-template.md`
+- Create: `plugins/compound-engineering/skills/document-review/references/review-output-template.md`
 
 **Approach:**
+
+**Reference files (aligned with ce:review-beta PR #348 mechanism):**
+- `findings-schema.json`: JSON schema that all persona agents must conform to. Same structure as ce:review-beta with document-specific swaps: `section` replaces `file`+`line`, `deferred_questions` replaces `testing_gaps`, drop `pre_existing`. Same enums for severity, autofix_class, owner.
+- `subagent-template.md`: Shared prompt template with variable slots ({persona_file}, {schema}, {document_content}, {document_path}, {document_type}). Rules: "Return ONLY valid JSON matching the schema", suppress below confidence floor, every finding needs evidence. Adapted from ce:review-beta's template for document context instead of diff context.
+- `review-output-template.md`: Markdown template for synthesized output. Findings grouped by severity (P0-P3), pipe-delimited tables with section, issue, reviewer, confidence, and route (autofix_class -> owner). Adapted from ce:review-beta's template for sections instead of file:line.
 
 The rewritten skill has these phases:
 
@@ -338,19 +376,20 @@ The rewritten skill has these phases:
 
 **Phase 3 -- Synthesize Findings:**
 Synthesis pipeline (order matters):
-1. **Validate**: Check each agent's output for structural compliance. Drop malformed findings but note the agent's name for the coverage section.
+1. **Validate**: Check each agent's output for structural compliance against findings-schema.json. Drop malformed findings but note the agent's name for the coverage section.
 2. **Confidence gate**: Suppress findings below 0.50 confidence. Store them as residual concerns.
-3. **Deduplicate**: Fingerprint each finding using `normalize(section) + normalize(title)`. When fingerprints match: keep highest priority, highest confidence, union evidence, note all agreeing reviewers.
-4. **Promote residual concerns**: Scan residual concerns for overlap with existing findings from other reviewers or concrete blocking risks. Promote to findings at MEDIUM priority with confidence 0.55-0.65.
-5. **Resolve contradictions**: When personas disagree on the same section (e.g., scope-guardian says cut, coherence says keep for narrative flow), create a combined finding presenting both perspectives with action type "present" -- let the user decide.
-6. **Classify action type**: auto-fix (terminology inconsistencies, structural issues, missing cross-references, vague language, formatting) vs present (scope challenges, problem framing, priority conflicts, feasibility tradeoffs, design gaps, premise questions).
-7. **Sort**: HIGH -> MEDIUM -> LOW, then by confidence (descending), then document order.
+3. **Deduplicate**: Fingerprint each finding using `normalize(section) + normalize(title)`. When fingerprints match: keep highest severity, highest confidence, union evidence, note all agreeing reviewers.
+4. **Promote residual concerns**: Scan residual concerns for overlap with existing findings from other reviewers or concrete blocking risks. Promote to findings at P2 with confidence 0.55-0.65.
+5. **Resolve contradictions**: When personas disagree on the same section (e.g., scope-guardian says cut, coherence says keep for narrative flow), create a combined finding presenting both perspectives with autofix_class `manual` and owner `human` -- let the user decide.
+6. **Route by autofix_class**: `safe_auto` -> apply immediately. Everything else (`gated_auto`, `manual`, `advisory`) -> present to user. Personas classify precisely; the orchestrator collapses to 2 buckets.
+7. **Sort**: P0 -> P1 -> P2 -> P3, then by confidence (descending), then document order.
 
 **Phase 4 -- Apply and Present:**
-- Apply auto-fix changes to the document inline (single pass, quality issues only)
-- Present strategic findings to the user, grouped by priority, with the persona perspective that generated each
-- Show a brief summary: N auto-fixes applied, M strategic questions to consider
+- Apply `safe_auto` fixes to the document inline (single pass)
+- Present all other findings (`gated_auto`, `manual`, `advisory`) to the user, grouped by severity
+- Show a brief summary: N auto-fixes applied, M findings to consider
 - Show coverage: which personas ran, any suppressed/residual counts
+- Use the review-output-template.md format for consistent presentation
 
 **Phase 5 -- Next Action:**
 - Use the platform's blocking question tool when available (AskUserQuestion in Claude Code, request_user_input in Codex, ask_user in Gemini). Otherwise present numbered options and wait.
@@ -370,8 +409,8 @@ Synthesis pipeline (order matters):
 - Don't add new sections not discussed in the brainstorm/plan
 
 **Conflict resolution rules for synthesis:**
-- When coherence says "keep for consistency" and scope-guardian says "cut for simplicity" -> present both perspectives, action: present
-- When feasibility says "this is impossible" and product-lens says "this is essential" -> HIGH priority finding, action: present, frame as a tradeoff
+- When coherence says "keep for consistency" and scope-guardian says "cut for simplicity" -> combined finding, autofix_class: manual, owner: human
+- When feasibility says "this is impossible" and product-lens says "this is essential" -> P1 finding, autofix_class: manual, owner: human, frame as a tradeoff
 - When multiple personas flag the same issue -> merge into single finding, note consensus, increase confidence
 - When a residual concern from one persona matches a finding from another -> promote the concern, note corroboration
 
@@ -384,8 +423,9 @@ Synthesis pipeline (order matters):
 - A backend refactor plan triggers only coherence + feasibility (no conditional personas)
 - A plan mentioning "user authentication flow" triggers coherence + feasibility + security-lens
 - A plan with UI mockups and 15 requirements triggers all 6 personas
-- Auto-fix correctly updates a terminology inconsistency without user approval
-- A contradictory finding (scope-guardian vs coherence) is presented as a combined question, not as two separate findings
+- A safe_auto finding correctly updates a terminology inconsistency without user approval
+- A gated_auto finding is presented to the user (not auto-applied) despite having a suggested_fix
+- A contradictory finding (scope-guardian vs coherence) is presented as a combined manual finding, not as two separate findings
 - A residual concern from one persona is promoted when corroborated by another persona's finding
 - Findings below 0.50 confidence are suppressed (not shown to user)
 - Duplicate findings from two personas are merged into one with both reviewer names
@@ -399,7 +439,8 @@ Synthesis pipeline (order matters):
 - Entry point matches current skill (path or auto-find)
 - Terminal signal "Review complete" preserved
 - Conditional persona selection logic is centralized in the skill
-- Synthesis pipeline follows the correct ordering (validate -> gate -> dedup -> promote -> resolve -> classify -> sort)
+- Synthesis pipeline follows the correct ordering (validate -> gate -> dedup -> promote -> resolve -> route -> sort)
+- Reference files exist: findings-schema.json, subagent-template.md, review-output-template.md
 - Cross-platform guidance included (platform question tool with fallback)
 - Protected artifacts section present
 
