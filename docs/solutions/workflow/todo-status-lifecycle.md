@@ -74,6 +74,6 @@ When a skill creates artifacts for downstream consumption, it should state which
 
 ## Cross-References
 
-- [review-skill-promotion-orchestration-contract.md](../skill-design/review-skill-promotion-orchestration-contract.md) -- promotion hazard: if mode flags are dropped during promotion, the wrong artifacts are produced upstream
+- [beta-promotion-orchestration-contract.md](../skill-design/beta-promotion-orchestration-contract.md) -- promotion hazard: if mode flags are dropped during promotion, the wrong artifacts are produced upstream
 - [compound-refresh-skill-improvements.md](../skill-design/compound-refresh-skill-improvements.md) -- "conservative confidence in autonomous mode" principle that motivates status enforcement
 - [claude-permissions-optimizer-classification-fix.md](../skill-design/claude-permissions-optimizer-classification-fix.md) -- "pipeline ordering is an architectural invariant" pattern; the same concept applies to the review -> triage -> resolve pipeline
