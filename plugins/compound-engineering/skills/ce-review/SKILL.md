@@ -67,18 +67,7 @@ Autopilot mode in `ce:review` is non-interactive review orchestration on the cur
 
 ## Severity Scale
 
-<<<<<<< HEAD
 All reviewers use P0-P3:
-=======
-- [ ] Determine review type: PR number (numeric), GitHub URL, file path (.md), or empty (current branch)
-- [ ] Check current git branch
-- [ ] If ALREADY on the target branch (PR branch, requested branch name, or the branch already checked out for review) → proceed with analysis on current branch
-- [ ] If DIFFERENT branch than the review target → in interactive mode, offer to use worktree: "Use git-worktree skill for isolated Call `skill: git-worktree` with branch name". In autopilot mode, do not switch the shared checkout; stop unless the target is already the current checkout.
-- [ ] Fetch PR metadata using `gh pr view --json` for title, body, files, linked issues
-- [ ] Set up language-specific analysis tools
-- [ ] Prepare security scanning environment
-- [ ] Make sure we are on the branch we are reviewing. In interactive mode, use `gh pr checkout` or manual checkout when needed. In autopilot mode, stay on the current branch/worktree and review that checkout only.
->>>>>>> fa54f45 (fix(compound-engineering): add review autopilot support)
 
 | Level | Meaning | Action |
 |-------|---------|--------|
@@ -109,13 +98,7 @@ Routing rules:
 
 8 personas in two tiers, plus CE-specific agents. See [persona-catalog.md](./references/persona-catalog.md) for the full catalog.
 
-<<<<<<< HEAD
 **Always-on (every review):**
-=======
-If no settings file exists:
-- in interactive mode, invoke the `setup` skill to create one, then read the newly created file and continue
-- in autopilot mode, do not invoke `setup`; use the default review agents listed in the Autopilot Mode section and continue
->>>>>>> fa54f45 (fix(compound-engineering): add review autopilot support)
 
 | Agent | Focus |
 |-------|-------|
@@ -458,13 +441,7 @@ This skill does NOT use language-specific reviewer agents. Persona reviewers ada
 
 After presenting findings and verdict (Stage 6), route the next steps by mode. Review and synthesis stay the same in every mode; only mutation and handoff behavior changes.
 
-<<<<<<< HEAD
 #### Step 1: Build the action sets
-=======
-In autopilot mode, skip this section entirely. `lfg` owns the verification step and will decide whether to run `test-browser` afterward.
-
-<detect_project_type>
->>>>>>> fa54f45 (fix(compound-engineering): add review autopilot support)
 
 - **Clean review** means zero findings after suppression and pre-existing separation. Skip the fix/handoff phase when the review is clean.
 - **Fixer queue:** final findings routed to `safe_auto -> review-fixer`.

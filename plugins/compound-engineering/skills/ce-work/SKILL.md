@@ -48,6 +48,7 @@ When that marker is present:
 - Validate that the manifest describes an active autopilot run
 - Use the manifest's artifacts and gate state as part of execution context
 - Treat `manifest.implementation_mode=swarm` as the explicit swarm opt-in for this run's implementation gate
+- Treat this skill as the owner of `gates.implementation` for the active run
 
 Then use the same safe defaults described below and avoid workflow prompts.
 
@@ -60,6 +61,10 @@ Specific behavior:
 - Never commit directly to the default branch without explicit user permission.
 - Stop only for true blockers: contradictory requirements, missing credentials, broken environment/setup, or another consent boundary that cannot be inferred safely.
 - When using a fallback or skipping a non-critical step, inform the user briefly and continue.
+- In autopilot mode, keep `gates.implementation.state = pending` while coding is still in progress.
+- Mark `gates.implementation.state = complete` only when the coding phase has reached a reviewable checkpoint: intended changes are implemented, implementation-blocking questions are resolved or externalized, and the code-oriented verification appropriate to this slice has run.
+- Mark `gates.implementation.state = blocked` only for true blockers.
+- Before returning in autopilot mode, update `gates.implementation.evidence` to explain why implementation is complete, pending, or blocked for the current run state.
 
 Decision boundaries in autopilot mode:
 

@@ -36,26 +36,25 @@ The goal is to make `lfg` the single autopilot entrypoint with a deterministic r
   - decision log path
 
 - R3a. The exact phase-1 manifest shape should be:
+  - `schema_version`
   - `run_id`
-  - `mode` with the fixed value `autopilot`
   - `route` with the enum `direct | lightweight | full`
   - `status` with the enum `active | completed | aborted`
   - `implementation_mode` with the enum `standard | swarm`
-  - `started_at`
-  - `updated_at`
   - `feature_description`
-  - `current_gate`
+  - `current_gate` (optional, advisory only)
   - `gates`, keyed by `requirements`, `plan`, `implementation`, `review`, `verification`, and `wrap_up`
-  - `artifacts`, containing `requirements_doc`, `plan_doc`, and `decision_log`
+  - `artifacts`, containing `requirements_doc` and `plan_doc`
 
 - R3b. Each manifest gate entry should include:
   - `state` with the enum `complete | skipped | pending | blocked | unknown`
   - `evidence`, as a short list of strings or references explaining why the gate was marked that way
+  - `ref` only for late-stage gates that can go stale after code changes: `review`, `verification`, and `wrap_up`
 
 - R3c. Manifest lifecycle should be:
   - created or backfilled as `active`
   - remain `active` while any gate is still `pending` or `blocked`
-  - transition to `completed` only when all required gates are `complete` and no required external blocker such as CI remains
+  - transition to `completed` only when all required gates are `complete` or `skipped` and no required external blocker such as CI remains
   - transition to `aborted` only when the run is intentionally stopped or cannot continue
 
 - R3d. Direct and lightweight routes should still create a manifest immediately. In those routes, `requirements` and `plan` may be marked `skipped` with routing evidence, and `artifacts.requirements_doc` / `artifacts.plan_doc` may remain unset by design.
@@ -84,6 +83,7 @@ The goal is to make `lfg` the single autopilot entrypoint with a deterministic r
 - R5f. `slfg` should become a deprecation wrapper or equivalent compatibility path that points users to `lfg` with swarm mode enabled, rather than remaining a parallel second contract surface.
 
 - R5g. The resume engine must define explicit evidence rules for late-stage gates. In particular, local verification, browser validation, review/todo resolution, and wrap-up gates should remain pending unless `lfg` can point to durable current-run or current-HEAD evidence that those steps were completed.
+- R5i. Late-stage best-effort steps must not derail the workflow by default. When browser validation or feature-video is inapplicable or blocked by ordinary environment/auth/tooling issues, `lfg` should record a skipped gate with a brief reason and continue unless the user or task explicitly requires that step.
 
 - R5h. The resume engine must use a deterministic precedence order when reconstructing state:
   - active manifest state for the current run

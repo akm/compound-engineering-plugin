@@ -61,28 +61,28 @@ Today the autopilot contract is described in prose across `lfg`, `slfg`, and sev
 
 - **Use a short prefix invocation marker plus a run manifest**: The chosen signaling family is a small explicit autopilot prefix at the start of downstream skill input, plus a run-scoped manifest file under `.context/compound-engineering/autopilot/<run-id>/`. This avoids relying on line breaks, XML blocks, or platform-specific positional args.
 - **Resolve the marker as a technical choice now**: Standardize on a prefix marker in the shape `[ce-autopilot manifest=<path>] :: <actual input>` (or the equivalent parsing contract without semantic drift). The family is already decided; the plan should not reopen broader signaling alternatives.
-- **The manifest owns artifact discovery**: The minimum manifest shape should include `run_id`, `mode`, `status`, `feature_description`, `requirements_doc`, `plan_doc`, and `decision_log`. Downstream skills should read and update those fields instead of rediscovering artifacts heuristically.
+- **The manifest owns artifact discovery**: The minimum manifest shape should include `schema_version`, `run_id`, `route`, `status`, `feature_description`, `requirements_doc`, and `plan_doc`. Downstream skills should read and update those fields instead of rediscovering artifacts heuristically.
 - **The manifest also records gate state and completion evidence**: In addition to artifact paths, the run state should capture ordered gate status (`complete`, `pending`, `blocked`, `unknown`) and the evidence used to mark reconstructed gates complete.
 - **The exact phase-1 manifest schema is fixed**: Use:
+  - `schema_version`
   - `run_id`
   - `route` = `direct | lightweight | full`
-  - `mode` = `autopilot`
   - `status` = `active | completed | aborted`
   - `implementation_mode` = `standard | swarm`
-  - `started_at`
-  - `updated_at`
   - `feature_description`
-  - `current_gate`
+  - `current_gate` (optional, advisory only)
   - `gates.requirements | gates.plan | gates.implementation | gates.review | gates.verification | gates.wrap_up`, each with `state` = `complete | skipped | pending | blocked | unknown` plus `evidence`
-  - `artifacts.requirements_doc | artifacts.plan_doc | artifacts.decision_log`
+  - `gates.review.ref | gates.verification.ref | gates.wrap_up.ref` for stale late-stage invalidation after code changes
+  - `artifacts.requirements_doc | artifacts.plan_doc`
   - direct and lightweight routes still create a manifest; they mark `requirements` and `plan` as `skipped` with evidence when those artifacts are intentionally absent
-- **Run status stays coarse; gate state carries detail**: "Waiting on CI" or "review incomplete" should be expressed in gate state and evidence while the overall run remains `active`. Only `completed` and `aborted` are terminal.
+- **Run status stays coarse; gate state carries detail**: "Waiting on CI" or "review incomplete" should be expressed in gate state and evidence while the overall run remains `active`. Only `completed` and `aborted` are terminal, and `completed` allows required gates to be either `complete` or `skipped`.
 - **`lfg` is the only top-level autopilot entrypoint**: `slfg` should stop owning its own orchestration contract. When users want parallel execution, `lfg` should expose swarm as an execution mode, and `slfg` should become a compatibility wrapper that points there.
 - **Swarm selection belongs behind `lfg`**: In phase 1, swarm should be selected explicitly by user intent. Repo/project defaults should use `compound-engineering.local.md` frontmatter `implementation_mode: standard | swarm`, with missing treated as `standard`.
 - **`lfg` resumes from current state, not only from scratch**: If an active autopilot manifest exists, resume from it. If no active manifest exists, inspect repo artifacts and PR state, infer the current gate state conservatively, create a fresh manifest seeded with that state, and continue from the next appropriate step.
 - **Resume is a deterministic ordered-gate engine**: `lfg` should not "guess the stage" loosely. It should evaluate, in order, `requirements`, `plan`, `implementation`, `review`, `verification`, and `wrap-up`, then advance the first unmet gate it can justify from evidence.
 - **State reconstruction has explicit evidence precedence**: Gate completion should be derived in this order: active manifest state, explicit user direction in the current `lfg` invocation, durable workflow artifacts and repo state, then PR/CI state for the current branch/HEAD. If ambiguity remains after those sources, `lfg` should ask one targeted question rather than take a risky leap.
 - **Late-stage gates must be conservative**: Review resolution, local verification, browser validation, and wrap-up should remain pending unless `lfg` has current evidence for them. A generic open PR or historical branch activity is not enough.
+- **Best-effort late-stage steps should degrade gracefully**: Browser testing and feature-video should usually record `skipped` with a brief reason when environment/auth/tooling prevents them, not derail the whole run.
 - **PR-stage orchestration is a first-class contract**: When resuming from an implementation or PR stage, `lfg` should inspect CI status for the current HEAD, decide whether local tests or browser checks need reruns, and distinguish "waiting on CI" from truly DONE.
 - **Keep the runtime rubric in-skill for the first wave**: Because installed skills must be self-sufficient and packaging a shared runtime reference adds complexity, phase 1 should place the rubric and role ordering directly in the relevant skill files. A shared authored source copied into each skill can be reconsidered later.
 - **Use one shared decision-criteria set across the first-wave skills**: The substantive roles should evaluate choices using a common criteria vocabulary so recommendations and autonomous decisions stay consistent across phases:

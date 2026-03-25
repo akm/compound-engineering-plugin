@@ -73,13 +73,15 @@ The runtime contract is:
   - `[ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: <normal input>`
 - manifest directory:
   - `.context/compound-engineering/autopilot/<run-id>/`
+- direct and lightweight routes still create lightweight manifests; absent requirements/plan artifacts are intentional there
+- late-stage gate completions may carry a HEAD `ref` so `lfg` can invalidate stale review/verification/wrap-up state after code changes
 
 The core rule: **skip workflow prompts, keep only truly necessary content prompts.**
 
 - Skip workflow prompts such as handoff menus, post-generation options, "what next?" routing questions, browser-mode pickers, and best-effort artifact choices. The pipeline controls flow.
 - Keep content prompts only when proceeding would require inventing product behavior, scope, success criteria, or another user decision that materially changes the work.
 - For execution and wrap-up skills, prefer safe automatic defaults over interactive choice menus.
-- When autopilot mode skips, downgrades, or best-effort-skips a material step, inform the user briefly and continue. Do not block on the prompt.
+- When autopilot mode skips, downgrades, or best-effort-skips a material step, inform the user briefly and continue. Do not block on the prompt. Record the skip reason in the manifest gate evidence when the skill owns that gate.
 - Skills must write durable outputs when applicable and return control without chaining into the next step.
 
 Skills with autopilot mode: `ce:brainstorm`, `ce:plan`, `deepen-plan`, `ce:work`, `ce:work-beta`, `ce:review`, `ce:review-beta`, `test-browser`, `feature-video`. Document behavioral changes in a `## Autopilot Mode` section within the skill's SKILL.md and describe how the skill handles the marker/manifest contract when relevant.

@@ -35,17 +35,20 @@ When that marker is present:
 - Read the manifest path from the marker
 - Validate that the manifest describes an active autopilot run
 - Treat this skill as an autopilot contract consumer, not a substantive decision owner
+- Treat `verification` as best-effort by default unless the caller or task explicitly requires interactive/browser validation before the run can be considered done
 
 Then prefer progress over interaction and use safe defaults.
 
 Specific behavior:
 
 - Default to headless mode. Do not ask whether to watch the browser.
-- If `agent-browser` cannot be installed or the dev server is not running, note the skip briefly and return control to the caller.
-- If a flow requires human verification (OAuth, email, payments, SMS, external service confirmation), mark it as manual verification required, note it briefly, and continue testing other routes.
+- If `agent-browser` cannot be installed or the dev server is not running, set `gates.verification.state = skipped` with a brief reason unless interactive/browser validation was explicitly required; in the required case, mark it `blocked`. Then return control to the caller.
+- If a flow requires human verification (OAuth, email, payments, SMS, external service confirmation), mark it as manual verification required. Set `gates.verification.state = skipped` with a brief reason unless interactive/browser validation was explicitly required; in the required case, mark it `blocked`. Continue testing other routes when possible.
 - If a page test fails, capture the failure, create a todo file in `.context/compound-engineering/todos/` for follow-up, note it briefly, and continue testing the remaining routes.
 - Briefly inform the user when a material verification step was skipped or degraded. Do not block on the prompt.
 - Do not append substantive product or implementation decisions to the autopilot decision log. This skill only emits operational notes and todos.
+- When browser verification succeeds in autopilot mode, set `gates.verification.state = complete`, record brief evidence, and set `gates.verification.ref = current HEAD`.
+- When browser verification finds issues that were externalized as todos or otherwise needs a rerun, leave `gates.verification.state = pending` with brief evidence so `lfg` can revisit it after follow-up work.
 
 ## Setup
 
@@ -73,7 +76,7 @@ command -v agent-browser >/dev/null 2>&1 && echo "Ready" || (echo "Installing...
 
 If installation fails:
 
-- In autopilot mode, note the skip briefly and return control to the caller.
+- In autopilot mode, set `gates.verification.state = skipped` with a brief reason unless interactive/browser validation was explicitly required; in the required case, mark it `blocked`. Then return control to the caller.
 - Otherwise, inform the user and stop.
 
 ### 2. Choose Browser Mode
@@ -163,7 +166,7 @@ agent-browser snapshot -i
 
 If the server is not running:
 
-- In autopilot mode, note the skip briefly and return control to the caller.
+- In autopilot mode, set `gates.verification.state = skipped` with a brief reason unless interactive/browser validation was explicitly required; in the required case, mark it `blocked`. Then return control to the caller.
 - Otherwise, inform the user:
 
 ```
@@ -224,7 +227,7 @@ Pause for human input when testing touches flows that require external interacti
 | SMS | "Verify you received the SMS code" |
 | External APIs | "Confirm the [service] integration is working" |
 
-In autopilot mode, mark the route as requiring manual verification, note it briefly, and continue.
+In autopilot mode, mark the route as requiring manual verification. Set `gates.verification.state = skipped` with a brief reason unless interactive/browser validation was explicitly required; in the required case, mark it `blocked`. Note it briefly and continue.
 
 Otherwise, ask the user (using the platform's question tool, or present numbered options and wait):
 
@@ -269,7 +272,7 @@ When a test fails:
 4. **If "Create todo":** use `todo-create` when available to create a pending p1 todo with description `browser-test-{description}`. Otherwise create `{id}-pending-p1-browser-test-{description}.md` directly in `.context/compound-engineering/todos/`, continue
 5. **If "Skip":** log as skipped, continue
 
-For autopilot failures, use `todo-create` when available. Otherwise create the todo directly in `.context/compound-engineering/todos/` using the standard naming and structure.
+For autopilot failures, use `todo-create` when available. Otherwise create the todo directly in `.context/compound-engineering/todos/` using the standard naming and structure. Leave `gates.verification.state = pending` with brief evidence that follow-up work is required before verification can be considered complete.
 
 ### 10. Test Summary
 

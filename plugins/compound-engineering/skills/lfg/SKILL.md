@@ -19,22 +19,22 @@ For resumable `lfg` runs across direct, lightweight, and full-pipeline routes, `
   - `session.json`
   - `decisions.md`
 - Phase-1 manifest schema:
+  - `schema_version`
   - `run_id`
   - `route` = `direct | lightweight | full`
-  - `mode` = `autopilot`
   - `status` = `active | completed | aborted`
   - `implementation_mode` = `standard | swarm`
-  - `started_at`
-  - `updated_at`
   - `feature_description`
-  - `current_gate`
+  - `current_gate` (optional, advisory only; recompute from gate state on resume)
   - `gates.requirements | gates.plan | gates.implementation | gates.review | gates.verification | gates.wrap_up`
-  - `artifacts.requirements_doc | artifacts.plan_doc | artifacts.decision_log`
+  - `artifacts.requirements_doc | artifacts.plan_doc`
 - Each gate entry contains:
   - `state` = `complete | skipped | pending | blocked | unknown`
   - `evidence`
+  - `ref` only for `review`, `verification`, and `wrap_up` so `lfg` can invalidate stale late-stage completions after code changes
 
 `lfg` is the only top-level skill that creates or backfills these manifests. Downstream skills must use the explicit marker plus manifest path rather than guessing from caller prose.
+The manifest is the primary resume source, but never blindly trust it. On resume, validate it against durable artifacts and current repo state, then repair it conservatively if it is stale or inconsistent.
 
 Direct and lightweight routes still create a lightweight manifest immediately. In those routes, `artifacts.requirements_doc` and `artifacts.plan_doc` may remain unset by design, and `gates.requirements` / `gates.plan` should be marked `skipped` with routing evidence instead of being treated as missing work.
 
@@ -119,7 +119,7 @@ Skills run in autopilot mode: skip workflow prompts (handoff menus, "what next?"
 Before invoking downstream skills:
 
 1. Check for an active autopilot manifest for the current branch/worktree.
-2. If one exists, resume from it.
+2. If one exists, resume from it, but validate it against current durable artifacts and repo state before trusting it.
 3. If one does not exist, reconstruct one conservatively using this algorithm:
    - explicit user direction in the current `/lfg` invocation
    - durable workflow artifacts and repo state
@@ -144,17 +144,21 @@ Before invoking downstream skills:
    - `plan` is `complete` only when a plan doc exists; for `direct`/`lightweight`, mark it `skipped` with evidence
    - `implementation` stays `pending` when work appears in progress or evidence is mixed; mark it `complete` only with strong evidence such as completed plan checkboxes or other durable implementation-complete signals
    - `review`, `verification`, and `wrap_up` should be marked `complete` only from explicit evidence. Never infer those gates complete from an open PR alone
-8. If no coherent candidate route/artifact set exists, stop and tell the user there is nothing reliable to resume. Ask for a feature description or explicit plan path instead of guessing.
-9. Evaluate ordered workflow gates:
+8. Invalidate stale late-stage gates before resuming:
+   - if `gates.review.ref` exists and does not match the current HEAD, reset `review`, `verification`, and `wrap_up` to `pending`
+   - if `gates.verification.ref` exists and does not match the current HEAD, reset `verification` and `wrap_up` to `pending`
+   - if `gates.wrap_up.ref` exists and does not match the current HEAD, reset `wrap_up` to `pending`
+9. If no coherent candidate route/artifact set exists, stop and tell the user there is nothing reliable to resume. Ask for a feature description or explicit plan path instead of guessing.
+10. Evaluate ordered workflow gates:
    - `requirements`
    - `plan`
    - `implementation`
    - `review`
    - `verification`
    - `wrap_up`
-10. Mark a gate complete only when current evidence supports it. If you cannot prove a gate is complete, leave it `pending`, `skipped`, or `blocked` as appropriate.
-11. Create or backfill `.context/compound-engineering/autopilot/<run-id>/session.json` and `.context/compound-engineering/autopilot/<run-id>/decisions.md`.
-12. Advance one gate at a time. After each downstream skill returns, update the manifest evidence, recompute the first unmet gate, and continue until all required gates are complete or a real blocker stops the run.
+11. Mark a gate complete only when current evidence supports it. If you cannot prove a gate is complete, leave it `pending`, `skipped`, or `blocked` as appropriate.
+12. Create or backfill `.context/compound-engineering/autopilot/<run-id>/session.json` and `.context/compound-engineering/autopilot/<run-id>/decisions.md`.
+13. Advance one gate at a time. After each downstream skill returns, update the manifest evidence, recompute the first unmet gate, and continue until all required gates are complete or a real blocker stops the run.
 
 Late-stage rule:
 
@@ -162,8 +166,10 @@ Late-stage rule:
 - Evaluate `review`, `verification`, and `wrap_up` separately.
 - Inspect GitHub CI for the current HEAD.
 - If current evidence for local tests, browser validation, or PR artifacts is missing or stale, rerun or re-request the narrowest applicable step.
+- Treat `test-browser` and `feature-video` as best-effort by default. If they are inapplicable or the environment is unavailable, mark the gate `skipped`, note the reason briefly, and continue.
+- Only treat `verification` as blocking when the user or task explicitly requires interactive/browser validation before the run can be considered done.
 - Keep the run `active` while CI is pending or a required late-stage gate is still `pending` or `blocked`.
-- Transition to `completed` only when all required gates are complete and no required external blocker remains.
+- Transition to `completed` only when all required gates are `complete` or `skipped` and no required external blocker remains.
 
 1. If the recomputed first unmet gate is `requirements`, run:
    - `/ce:brainstorm [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: $ARGUMENTS`
@@ -194,7 +200,7 @@ Late-stage rule:
 
    `ce:work` must honor the active manifest's `implementation_mode` when deciding between standard execution and swarm mode. Do not require a second swarm-specific handoff token here.
 
-   GATE: Verify that implementation work was performed -- files were created or modified beyond the plan. Do NOT proceed if no code changes were made.
+   GATE: Verify that implementation work was performed and the manifest now records `gates.implementation` for the current run state. Do NOT proceed if no code changes were made or the implementation gate was left ambiguous.
 
 6. If the recomputed first unmet gate is `review`, run `/ce:review [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: current` -- catch issues before they ship
 
@@ -202,12 +208,12 @@ Late-stage rule:
 
    GATE: If todo resolution changed code or behavior, re-verify the final state before proceeding. Run the narrowest checks that cover what changed (for example targeted tests, lint/typecheck, or another browser check for UI-affecting changes). If todo resolution made no functional code changes, briefly note that and continue.
 
-8. If the recomputed first unmet gate is `verification`, conditionally run `/compound-engineering:test-browser [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: current` -- verify the feature works in a real browser. Read `compound-engineering.local.md` frontmatter; skip if `autopilot_features.test_browser` is `false`. If the setting is missing, assume enabled.
+8. If the recomputed first unmet gate is `verification`, conditionally run `/compound-engineering:test-browser [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: current` -- best-effort browser validation for work that actually needs interactive testing. Read `compound-engineering.local.md` frontmatter; skip if `autopilot_features.test_browser` is `false`. If the setting is missing, assume enabled.
 
 9. If verification created todos, run `/compound-engineering:todo-resolve` before advancing -- same resolve/compound/clean-up cycle as step 7.
 
-10. If the recomputed first unmet gate is `wrap_up`, conditionally run `/compound-engineering:feature-video [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: current` -- record a walkthrough and add to the PR. Read `compound-engineering.local.md` frontmatter; skip if `autopilot_features.feature_video` is `false`. If the setting is missing, assume enabled. Also skip if the project has no browser-based UI (e.g., CLI tools, plugins, libraries, APIs).
+10. If the recomputed first unmet gate is `wrap_up`, conditionally run `/compound-engineering:feature-video [ce-autopilot manifest=.context/compound-engineering/autopilot/<run-id>/session.json] :: current` -- best-effort walkthrough capture and PR polish. Read `compound-engineering.local.md` frontmatter; skip if `autopilot_features.feature_video` is `false`. If the setting is missing, assume enabled. Also skip if the project has no browser-based UI (e.g., CLI tools, plugins, libraries, APIs).
 
-11. Output `<promise>DONE</promise>` only when all required gates are complete. If the run is only waiting on external CI, report that explicitly instead of claiming completion.
+11. Output `<promise>DONE</promise>` only when all required gates are `complete` or `skipped`. If the run is only waiting on external CI, report that explicitly instead of claiming completion.
 
 Start now.

@@ -87,12 +87,12 @@ Decision boundaries in autopilot mode:
 - **Must log**
   - any substantive autonomous product decision written into the requirements doc without asking first
 
-When a requirements document is created or updated in autopilot mode, update the manifest's `artifacts.requirements_doc` path and append any substantive autonomous decisions to the run-scoped `decisions.md` table.
+When a requirements document is created or updated in autopilot mode, update the manifest's `artifacts.requirements_doc` path, set `gates.requirements.state = complete` with brief evidence, and append any substantive autonomous decisions to the run-scoped `decisions.md` table.
 
 Specific phase behavior:
 
 - **Phase 0.1:** If a relevant requirements document already exists, read it. Skip it (proceed to Phase 0.2 to reassess the current `$ARGUMENTS`) if: a plan in `docs/plans/` has an `origin:` frontmatter field pointing to this requirements doc and `status: completed` (the doc was already fully consumed), or its problem frame and requirements meaningfully diverge from the current feature description (`$ARGUMENTS`). If the doc is still relevant (no completed plan referencing it and scope matches), check for `Resolve Before Planning` items. If the document is plan-ready (no blocking questions), note it and return control immediately. If it still has `Resolve Before Planning` items, resume the brainstorm to resolve them (proceed to Phase 1.3) rather than returning control -- otherwise the pipeline dead-ends because `ce:plan` will block and re-invoking `ce:brainstorm` will hit this same check. Do not ask whether to resume or start fresh.
-- **Phase 0.2 short-circuit is a genuine skip.** If requirements are already clear (specific acceptance criteria, exact expected behavior, well-defined scope), skip brainstorm entirely. Note "requirements clear, skipping brainstorm" and return control to the calling workflow. Do not proceed to Phase 1.3 or Phase 3.
+- **Phase 0.2 short-circuit is a genuine skip.** If requirements are already clear (specific acceptance criteria, exact expected behavior, well-defined scope), skip brainstorm entirely. Note "requirements clear, skipping brainstorm", and in autopilot mode set `gates.requirements.state = complete` with brief evidence before returning control to the calling workflow. Do not proceed to Phase 1.3 or Phase 3.
 - **Phases 1.3 and 2:** Content questions to clarify vague or ambiguous requirements are still permitted. The user is present and getting requirements right is more valuable than speed.
 - **Phase 4 handoff is skipped.** Do not present handoff options or invoke `/ce:plan`. Write the requirements document (if warranted) and return control to the calling workflow.
 
