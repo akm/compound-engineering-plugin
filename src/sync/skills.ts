@@ -1,6 +1,6 @@
 import path from "path"
 import type { ClaudeSkill } from "../types/claude"
-import { ensureDir } from "../utils/files"
+import { ensureDir, sanitizePathName } from "../utils/files"
 import { forceSymlink, isValidSkillName } from "../utils/symlink"
 
 export async function syncSkills(
@@ -15,7 +15,7 @@ export async function syncSkills(
       continue
     }
 
-    const target = path.join(skillsDir, skill.name)
+    const target = path.join(skillsDir, sanitizePathName(skill.name))
     await forceSymlink(skill.sourceDir, target)
   }
 }
