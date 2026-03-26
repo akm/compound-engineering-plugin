@@ -42,7 +42,7 @@ Parse the JSON output. This provides:
 - Directory structure (top-level + one level into source directories)
 - Entry points per detected ecosystem
 - Available scripts/commands
-- Existing documentation files
+- Existing documentation files (with first-heading titles for triage)
 - Test infrastructure
 - Infrastructure and external dependencies (env files, docker services, detected integrations)
 - Monorepo structure (if applicable)
@@ -53,20 +53,28 @@ If the script fails or returns an error field, report the issue to the user and 
 
 Guided by the inventory, read files that are essential for understanding the codebase. Use the native file-read tool (not shell commands).
 
-**Priority order -- read up to ~15 key files total:**
+**What to read and why:**
+
+Read files in parallel batches where there are no dependencies between them. For example, batch README.md, entry points, and AGENTS.md/CLAUDE.md together in a single turn since none depend on each other's content.
+
+Only read files whose content is needed to write the five sections with concrete, specific detail. The inventory already provides structure, languages, frameworks, scripts, and entry point paths -- don't re-read files just to confirm what the inventory already says. Different repos need different amounts of reading; a small CLI tool might need 4 files, a complex monorepo might need 20. Let the sections drive what you read, not an arbitrary count.
+
+**Priority order:**
 
 1. **README.md** (if exists) -- for project purpose and setup instructions
 2. **Primary entry points** -- the files listed in `entryPoints` from the inventory. These reveal what the application does when it starts.
 3. **Route/controller files** -- look for `routes/`, `app/controllers/`, `src/routes/`, `src/api/`, or similar directories from the inventory structure. Read the main route file to understand the primary flow.
-4. **Configuration files that reveal architecture and external dependencies** -- `docker-compose.yml`, `.env.example`, `.env.sample`, database config, `next.config.*`, `vite.config.*`, or similar. These reveal what the system depends on externally. Only read these if they exist in the inventory. **Never read `.env` itself** -- only read `.env.example` or `.env.sample` templates. Extract variable names only, never values.
+4. **Configuration files that reveal architecture and external dependencies** -- `docker-compose.yml`, `.env.example`, `.env.sample`, database config, `next.config.*`, `vite.config.*`, or similar. Only read these if they exist in the inventory. **Never read `.env` itself** -- only `.env.example` or `.env.sample` templates. Extract variable names only, never values.
 5. **AGENTS.md or CLAUDE.md** (if exists) -- for project conventions and patterns already documented.
-6. **A sample of discovered documentation** -- scan titles and first paragraphs of files from the inventory's `docs` list. Read fully only those that appear directly relevant to the five sections.
+6. **Discovered documentation** -- the inventory's `docs` list includes each file's title (first heading). Use those titles to decide which docs are relevant to the five sections without reading them first. Only read the full content of docs whose titles indicate direct relevance. Skip dated brainstorm/plan files unless the focus hint specifically calls for them.
 
-Do not read files speculatively. Every file read should be justified by the inventory output.
+Do not read files speculatively. Every file read should be justified by the inventory output and traceable to a section that needs it.
 
 ### Phase 3: Write ONBOARDING.md
 
 Synthesize the inventory data and key file contents into a document with exactly five sections. Write the file to the repo root.
+
+**Title**: Use `# {Project Name} Onboarding Guide` as the document heading. Derive the project name from the inventory. Do not use the filename as a heading.
 
 **Writing style -- the document should read like a knowledgeable teammate explaining the project over coffee, not like generated documentation.**
 
@@ -96,6 +104,12 @@ What to avoid:
 - Use bold for emphasis sparingly
 - Keep paragraphs short -- 2-4 sentences
 
+**Width constraint for code blocks -- 80 columns max.** Markdown code blocks render with `white-space: pre` and never wrap, so wide lines cause horizontal scrolling on GitHub, tablets, and narrow viewports. Tables are fine -- markdown renderers wrap them. Apply these rules to all content inside ``` fences:
+
+- **ASCII architecture diagrams**: Stack boxes vertically instead of laying them out horizontally. Never place more than 2 boxes on the same horizontal line, and keep each box label under 20 characters. This caps diagrams at ~60 chars wide.
+- **Flow diagrams**: Keep file path + annotation under 80 chars. If a description is too long, move it to a line below or shorten it.
+- **Directory trees**: Keep inline `# comments` under 30 characters. Prefer brief role descriptions ("Editor plugins") over exhaustive lists ("marks, heatmap, suggestions, collab cursors, etc.").
+
 #### Section 1: What Is This?
 
 Answer: What does this project do, who is it for, and what problem does it solve?
@@ -111,6 +125,34 @@ Keep to 1-3 paragraphs.
 Answer: What is the architecture, what are the key modules, how do they connect, and what does the system depend on externally?
 
 This section covers both the **internal structure** and the **system boundary** -- what the application talks to outside itself.
+
+**System architecture** -- When a project has multiple major surfaces or deployment targets (e.g., a native app, a web server, and an API), include an ASCII architecture diagram showing how they relate at the system level before diving into directory structure. This helps the reader build a mental model of the system before seeing individual files.
+
+Use vertical stacking to keep diagrams under 80 columns:
+
+```
++------------------+
+| Native macOS App |
+| (Swift/WKWebView)|
++--------+---------+
+         |  bridge
+         v
++------------------+
+| Editor Engine    |  <-- shared core
+| (Milkdown/Yjs)  |
++--------+---------+
+         |  Vite build
+         v
++------------------+    WebSocket    +----------------+
+| Browser Client   |<=============>| Express Server  |
++------------------+               +--------+--------+
+                                            |
+                                   +--------v--------+
+                                   | SQLite + Yjs    |
+                                   +-----------------+
+```
+
+Skip this for simple projects (single-purpose libraries, CLI tools) where the directory tree already tells the whole story.
 
 **Internal structure** -- Include an ASCII directory tree showing the high-level layout:
 
@@ -180,39 +222,44 @@ Present both domain terms and abstractions in a single table:
 |---------|-------------------------------|
 | `Widget` | The primary entity users create and manage |
 | `Pipeline` | A sequence of processing steps applied to incoming data |
-| Service layer | Business logic lives in `src/services/`, not in route handlers |
-| Middleware chain | Request processing flows through `src/middleware/` before reaching routes |
+| Service layer | Business logic in `src/services/`, not handlers |
+| Middleware chain | Requests flow through `src/middleware/` first |
 ```
 
 Aim for 5-15 entries. Include only concepts that would confuse a new reader or that represent non-obvious architectural decisions. Skip universally understood terms.
 
-#### Section 4: Primary Flow
+#### Section 4: Primary Flows
 
-Answer: What happens when the main thing this app does actually happens?
+Answer: What happens when the main things this app does actually happen?
 
-Trace one concrete path through the system from the user's perspective. Start with the trigger ("When a user creates a new widget...") and walk through the code path.
+Trace one flow per distinct surface or user type. A "surface" is a meaningfully different entry path into the system -- a native app, a web UI, an API consumer, a CLI user. Each flow should reveal parts of the architecture that previous flows didn't cover. Stop when the next flow would mostly retrace files already shown.
 
-Include an ASCII flow diagram:
+For a simple library or CLI, that's one flow. For a full-stack app with a web UI and an API, that's two. For a product with native + web + agent surfaces, that's three. Let the architecture drive the count, not an arbitrary number.
+
+Include an ASCII flow diagram for the most important flow:
 
 ```
 User Request
   |
   v
-src/routes/widgets.ts    -- validates input, extracts params
+src/routes/widgets.ts
+  validates input, extracts params
   |
   v
-src/services/widget.ts   -- applies business rules, calls DB
+src/services/widget.ts
+  applies business rules, calls DB
   |
   v
-src/models/widget.ts     -- persists to PostgreSQL
+src/models/widget.ts
+  persists to PostgreSQL
   |
   v
 Response (201 Created)
 ```
 
-At each step, reference the specific file path. Explain what happens at that step in one sentence.
+At each step, reference the specific file path. Keep file path + annotation under 80 characters -- put the annotation on the next line if needed (as shown above).
 
-Choose the flow that best demonstrates how the system's pieces connect. For a web app, this is usually the primary CRUD operation. For a CLI, the main command. For a library, the primary public API path.
+Additional flows can use a numbered list instead of a full diagram if the first diagram already establishes the structural pattern.
 
 #### Section 5: Where Do I Start?
 
@@ -233,6 +280,24 @@ Cover three things:
    - "To add a new API endpoint, create a route handler in `src/routes/` and register it in `src/routes/index.ts`"
    - "To add a new database model, create a file in `src/models/` and run `bun migrate`"
 
+4. **Key files to start with** (for complex projects) -- A table mapping areas of the codebase to specific entry-point files with a brief "why start here" note. This gives a new contributor a concrete reading list instead of staring at a large directory tree. For example:
+
+   ```
+   | Area | File | Why |
+   |------|------|-----|
+   | Editor core | `src/editor/index.ts` | All editor wiring |
+   | Data model | `src/formats/marks.ts` | The annotation system everything builds on |
+   | Server entry | `server/index.ts` | Express app setup and route mounting |
+   ```
+
+   Skip this for projects with fewer than ~10 source files where the directory tree is already a sufficient reading list.
+
+5. **Practical tips** (for complex projects) -- If the codebase has areas that are particularly large, complex, or have non-obvious gotchas, surface them as brief contributor tips. These communicate real situational awareness that helps a new contributor avoid pitfalls. For example:
+   - "The editor module is ~450KB. Most behavior is wired through plugins in `src/editor/plugins/` -- understand the plugin architecture before making editor changes."
+   - "The collab subsystem has many guards and epoch checks. Read the test names to understand what invariants are maintained."
+
+   Skip this for simple projects where the codebase is small enough to hold in your head.
+
 #### Inline Documentation Links
 
 While writing each section, check whether any file from the inventory's `docs` list is directly relevant to what the section explains. If so, link inline:
@@ -251,7 +316,11 @@ Before writing the file, verify:
 - [ ] No fragility or risk assessments
 - [ ] File paths referenced in the document correspond to real files from the inventory
 - [ ] All file names, paths, commands, code references, and technical terms use backtick formatting
-- [ ] ASCII diagrams are present in the architecture and primary flow sections
+- [ ] Document title uses "# {Project Name} Onboarding Guide" format, not the filename
+- [ ] System-level architecture diagram included for multi-surface projects (skipped for simple libraries/CLIs)
+- [ ] All code block content (diagrams, trees, flow traces) fits within 80 columns
+- [ ] ASCII diagrams are present in the architecture and/or primary flow sections
+- [ ] One flow per distinct surface or user type (architecture drives the count, not an arbitrary number)
 - [ ] External dependencies and integrations are surfaced in the architecture section (or explicitly noted as absent)
 - [ ] Tables are used for module responsibilities, domain terms/abstractions, and external dependencies
 - [ ] Markdown styling is consistent throughout (headers, bold, code blocks, tables)

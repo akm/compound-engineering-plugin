@@ -371,11 +371,17 @@ async function detectLanguagesAndFrameworks() {
   // Layer 3: Config-file-based framework confirmation/detection.
   // Catches frameworks missed by dependency scanning and confirms ambiguous cases.
   const frameworkNames = new Set(frameworks.map(f => f.split(" ")[0]));
-  for (const { file, framework } of CONFIG_FILE_FRAMEWORKS) {
-    if (!framework) continue;
-    if (frameworkNames.has(framework)) continue;
-    // Some config files are nested (e.g., config/routes.rb)
-    if (await exists(join(root, file))) {
+  const uncheckedConfigs = CONFIG_FILE_FRAMEWORKS.filter(
+    ({ framework }) => framework && !frameworkNames.has(framework)
+  );
+  const configResults = await Promise.all(
+    uncheckedConfigs.map(async ({ file, framework }) => ({
+      framework,
+      found: await exists(join(root, file)),
+    }))
+  );
+  for (const { framework, found } of configResults) {
+    if (found && !frameworkNames.has(framework)) {
       frameworks.push(framework);
       frameworkNames.add(framework);
     }
@@ -415,7 +421,7 @@ async function getStructure() {
       if (children.length > 0 || files.length > 0) {
         srcLayout[dir] = {
           dirs: children,
-          files: files.slice(0, 20), // cap file listing
+          files: files.slice(0, 10), // cap file listing
         };
       }
     }
@@ -426,11 +432,18 @@ async function getStructure() {
 
 // ── Entry Points ──────────────────────────────────────────────────────────────
 
+// Helper: check a batch of candidate paths, return those that exist.
+async function filterExisting(candidates) {
+  const results = await Promise.all(
+    candidates.map(async (p) => (await exists(join(root, p))) ? p : null)
+  );
+  return results.filter(Boolean);
+}
+
 async function findEntryPoints(languages) {
-  const entryPoints = [];
   const langSet = new Set(languages);
 
-  // Universal entry points
+  // Universal entry points — check root and src/ in one batch
   const universalCandidates = [
     "index.ts", "index.js", "index.mjs", "index.tsx", "index.jsx",
     "main.ts", "main.js", "main.mjs", "main.tsx", "main.jsx",
@@ -438,77 +451,74 @@ async function findEntryPoints(languages) {
     "server.ts", "server.js", "server.mjs",
   ];
 
-  // Check root
-  for (const f of universalCandidates) {
-    if (await exists(join(root, f))) entryPoints.push(f);
+  const allCandidates = [
+    ...universalCandidates,
+    ...universalCandidates.map(f => `src/${f}`),
+  ];
+
+  // Language-specific candidates — add to the same batch
+  if (langSet.has("Node.js") || langSet.has("TypeScript") || langSet.has("Deno")) {
+    allCandidates.push(
+      "app/page.tsx", "app/page.jsx", "app/layout.tsx", "app/layout.jsx",
+      "src/app/page.tsx", "src/app/page.jsx", "src/app/layout.tsx", "src/app/layout.jsx",
+      "pages/index.tsx", "pages/index.jsx", "pages/index.js",
+      "src/pages/index.tsx", "src/pages/index.jsx",
+    );
   }
 
-  // Check src/
-  for (const f of universalCandidates) {
-    if (await exists(join(root, "src", f))) entryPoints.push(`src/${f}`);
+  if (langSet.has("Python")) {
+    allCandidates.push(
+      "main.py", "app.py", "manage.py", "run.py", "wsgi.py", "asgi.py",
+      "src/main.py", "src/app.py",
+    );
   }
 
-  // Node/TS specific
+  if (langSet.has("Ruby")) {
+    allCandidates.push(
+      "config.ru", "config/routes.rb", "config/application.rb",
+      "bin/rails", "Rakefile",
+    );
+  }
+
+  if (langSet.has("Go")) {
+    allCandidates.push("main.go");
+  }
+
+  if (langSet.has("Rust")) {
+    allCandidates.push("src/main.rs", "src/lib.rs");
+  }
+
+  // Single parallel batch for all fixed-path candidates
+  const entryPoints = await filterExisting(allCandidates);
+
+  // Node/TS: also check package.json main/module fields
   if (langSet.has("Node.js") || langSet.has("TypeScript") || langSet.has("Deno")) {
     const pkg = await readJson(join(root, "package.json"));
     if (pkg?.main && !entryPoints.includes(pkg.main)) entryPoints.push(pkg.main);
     if (pkg?.module && !entryPoints.includes(pkg.module)) entryPoints.push(pkg.module);
-
-    // Next.js / app router
-    for (const p of ["app/page.tsx", "app/page.jsx", "app/layout.tsx", "app/layout.jsx",
-                      "src/app/page.tsx", "src/app/page.jsx", "src/app/layout.tsx", "src/app/layout.jsx",
-                      "pages/index.tsx", "pages/index.jsx", "pages/index.js",
-                      "src/pages/index.tsx", "src/pages/index.jsx"]) {
-      if (await exists(join(root, p))) entryPoints.push(p);
-    }
   }
 
-  // Python
+  // Python: __main__.py in src subdirectories (requires listing)
   if (langSet.has("Python")) {
-    for (const f of ["main.py", "app.py", "manage.py", "run.py", "wsgi.py", "asgi.py",
-                      "src/main.py", "src/app.py"]) {
-      if (await exists(join(root, f))) entryPoints.push(f);
-    }
-    // __main__.py in src subdirectories
     const srcEntries = await listDir(join(root, "src"));
-    for (const e of srcEntries) {
-      if (e.isDirectory() && await exists(join(root, "src", e.name, "__main__.py"))) {
-        entryPoints.push(`src/${e.name}/__main__.py`);
-      }
-    }
+    const pyMains = await filterExisting(
+      srcEntries.filter(e => e.isDirectory()).map(e => `src/${e.name}/__main__.py`)
+    );
+    entryPoints.push(...pyMains);
   }
 
-  // Ruby
-  if (langSet.has("Ruby")) {
-    for (const f of ["config.ru", "config/routes.rb", "config/application.rb",
-                      "bin/rails", "Rakefile"]) {
-      if (await exists(join(root, f))) entryPoints.push(f);
-    }
-  }
-
-  // Go
+  // Go: cmd/*/main.go (requires listing)
   if (langSet.has("Go")) {
-    if (await exists(join(root, "main.go"))) entryPoints.push("main.go");
-    // cmd/*/main.go
     const cmdDir = join(root, "cmd");
     if (await exists(cmdDir)) {
       const cmds = await listDir(cmdDir);
-      for (const c of cmds) {
-        if (c.isDirectory() && await exists(join(cmdDir, c.name, "main.go"))) {
-          entryPoints.push(`cmd/${c.name}/main.go`);
-        }
-      }
+      const goMains = await filterExisting(
+        cmds.filter(c => c.isDirectory()).map(c => `cmd/${c.name}/main.go`)
+      );
+      entryPoints.push(...goMains);
     }
   }
 
-  // Rust
-  if (langSet.has("Rust")) {
-    for (const f of ["src/main.rs", "src/lib.rs"]) {
-      if (await exists(join(root, f))) entryPoints.push(f);
-    }
-  }
-
-  // Deduplicate
   return [...new Set(entryPoints)];
 }
 
@@ -559,36 +569,54 @@ async function detectScripts() {
 
 // ── Documentation Discovery ──────────────────────────────────────────────────
 
+// Extract the first markdown heading from a file (cheap I/O, avoids model reads).
+async function extractTitle(filePath) {
+  try {
+    const content = await readFile(filePath, "utf-8");
+    // Match first ATX heading (# Title)
+    const m = content.match(/^#{1,3}\s+(.+)/m);
+    return m ? m[1].trim() : null;
+  } catch { return null; }
+}
+
 async function findDocs() {
-  const docs = [];
+  const seen = new Set();
+  const paths = [];
+
+  function add(path) {
+    if (!seen.has(path)) { seen.add(path); paths.push(path); }
+  }
 
   // Root markdown files
   const rootFiles = await globShallow(root, [".md"]);
-  for (const f of rootFiles) {
-    docs.push(f);
-  }
+  for (const f of rootFiles) add(f);
 
-  // Common doc directories
-  const docDirs = ["docs", "doc", "documentation", "wiki", "docs/solutions",
-                    "docs/guides", "docs/architecture", ".github"];
+  // Common doc directories — only top-level entries; subdirs are discovered
+  // via the nested scan below, so no need to list nested paths like
+  // "docs/solutions" here (which caused duplicates).
+  const docDirs = ["docs", "doc", "documentation", "wiki", ".github"];
   for (const dir of docDirs) {
     const dirPath = join(root, dir);
     if (await exists(dirPath)) {
       const files = await globShallow(dirPath, [".md"]);
-      for (const f of files.slice(0, 20)) {
-        docs.push(`${dir}/${f}`);
-      }
-      // Check one level deeper
+      for (const f of files.slice(0, 10)) add(`${dir}/${f}`);
+      // One level deeper
       const subdirs = await listDirNames(dirPath);
-      for (const sub of subdirs.slice(0, 10)) {
+      for (const sub of subdirs.slice(0, 5)) {
         const subName = sub.replace("/", "");
         const subFiles = await globShallow(join(dirPath, subName), [".md"]);
-        for (const f of subFiles.slice(0, 10)) {
-          docs.push(`${dir}/${subName}/${f}`);
-        }
+        for (const f of subFiles.slice(0, 5)) add(`${dir}/${subName}/${f}`);
       }
     }
   }
+
+  // Extract titles in parallel so the model can triage without reading each file
+  const docs = await Promise.all(
+    paths.map(async (p) => {
+      const title = await extractTitle(join(root, p));
+      return title ? { path: p, title } : { path: p };
+    })
+  );
 
   return docs;
 }
@@ -791,7 +819,7 @@ async function main() {
     infrastructure,
   };
 
-  process.stdout.write(JSON.stringify(inventory, null, 2) + "\n");
+  process.stdout.write(JSON.stringify(inventory) + "\n");
 }
 
 main().catch(err => {
@@ -810,5 +838,5 @@ main().catch(err => {
     docs: [],
     testInfra: { dirs: [], config: [] },
     infrastructure: { envFiles: [], configFiles: [], services: [] },
-  }, null, 2) + "\n");
+  }) + "\n");
 });
