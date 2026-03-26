@@ -70,10 +70,10 @@ When adding or modifying skills, verify compliance with the skill spec:
 
 ### Reference Links (Required if references/ exists)
 
-- [ ] All files in `references/` are linked as `[filename.md](./references/filename.md)`
-- [ ] All files in `assets/` are linked as `[filename](./assets/filename)`
-- [ ] All files in `scripts/` are linked as `[filename](./scripts/filename)`
-- [ ] No bare backtick references like `` `references/file.md` `` - use proper markdown links
+- [ ] All files in `references/` that the agent should read into context are linked as `[filename.md](./references/filename.md)`
+- [ ] All files in `assets/` that the agent should read into context are linked as `[filename](./assets/filename)`
+- [ ] For files the agent needs to *read* (references, assets), use markdown links -- these signal "load this into context"
+- [ ] For files the agent needs to *execute* (scripts), backtick paths are sufficient (e.g., `` `scripts/my-script` ``) since the bash code block already provides the invocation
 
 ### Writing Style
 
@@ -95,7 +95,7 @@ When adding or modifying skills, verify compliance with the skill spec:
 
 - [ ] In bash code blocks, reference co-located scripts using relative paths (e.g., `bash scripts/my-script ARG`) — not `${CLAUDE_PLUGIN_ROOT}` or other platform-specific variables
 - [ ] All platforms resolve script paths relative to the skill's directory; no env var prefix is needed
-- [ ] Always also include a markdown link to the script (e.g., `[scripts/my-script](scripts/my-script)`) so the agent can locate and read it
+- [ ] Reference the script with a backtick path (e.g., `` `scripts/my-script` ``) so agents can locate it; a markdown link is not needed since the bash code block already provides the invocation
 
 ### Cross-Platform Reference Rules
 
