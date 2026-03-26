@@ -24,10 +24,12 @@ export default defineCommand({
     const pluginName = String(args.plugin)
     const branch = String(args.branch)
 
-    // Replace / with ~ to preserve slash position in the cache key.
-    // This is injective because ~ is illegal in git branch names (git-check-ref-format
-    // reserves it for reflog notation like HEAD~1), so no valid branch contains ~.
-    const sanitized = branch.replace(/\//g, "~").replace(/[^a-zA-Z0-9._~-]/g, "-")
+    // Reversible encoding: / -> ~ (safe because ~ is illegal in git branch names per
+    // git-check-ref-format), then percent-encode any remaining unsafe characters.
+    // This is injective — every distinct branch name maps to a distinct cache key.
+    const sanitized = branch
+      .replace(/\//g, "~")
+      .replace(/[^a-zA-Z0-9._~-]/g, (ch) => `%${ch.charCodeAt(0).toString(16).padStart(2, "0")}`)
     const dirName = `${pluginName}-${sanitized}`
     const cacheRoot = path.join(os.homedir(), ".cache", "compound-engineering", "branches")
     await fs.mkdir(cacheRoot, { recursive: true })
