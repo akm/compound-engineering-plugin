@@ -335,7 +335,7 @@ Options:
 
 Based on selection:
 - **Open for review** -> Open `ONBOARDING.md` using the current platform's file-open or editor mechanism
-- **Commit** -> Stage and commit `ONBOARDING.md` with a conventional commit message
+- **Commit** -> Load the `git-commit` skill if available; otherwise stage and commit `ONBOARDING.md` with a conventional commit message
 - **Share to Proof** -> Upload the document:
   ```bash
   CONTENT=$(cat ONBOARDING.md)
