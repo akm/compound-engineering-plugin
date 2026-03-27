@@ -78,7 +78,7 @@ cat plugins/compound-engineering/.claude-plugin/plugin.json | jq .
 ## Commit Conventions
 
 - **Prefix is based on intent, not file type.** Use conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, etc.) but classify by what the change does, not the file extension. Files under `plugins/*/skills/`, `plugins/*/agents/`, and `.claude-plugin/` are product code even though they are Markdown or JSON. Reserve `docs:` for files whose sole purpose is documentation (`README.md`, `docs/`, `CHANGELOG.md`).
-- Component scope is optional. Example: `feat(coding-tutor): add quiz reset`.
+- **Include a component scope.** The scope appears verbatim in the changelog. Pick the narrowest useful label: skill/agent name (`document-review`, `learnings-researcher`), plugin or CLI area (`coding-tutor`, `cli`), or shared area when cross-cutting (`review`, `research`, `converters`). Never use `compound-engineering` — it's the entire plugin and tells the reader nothing. Omit scope only when no single label adds clarity.
 - Breaking changes must be explicit with `!` or a breaking-change footer so release automation can classify them correctly.
 
 ## Adding a New Target Provider
