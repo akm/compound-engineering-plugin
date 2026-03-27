@@ -83,7 +83,17 @@ Empirical testing showed that how the skill phrases a search instruction has a d
 
 The "per-item walk" phrasing caused Claude Code to glob each directory level individually. The "bulk find, then filter" phrasing produced two globs total. Codex was resilient to both phrasings (it wrote a Python script to batch the work either way).
 
-The takeaway: the most effective way to enforce efficient agent behavior is to write the correct instruction directly in the skill. Meta-rules in AGENTS.md about "how to phrase instructions efficiently" are too abstract to apply consistently — the person writing the skill won't remember them at the right moment. Instead, get the phrasing right in each skill where it matters, and document the pattern here for when someone asks why.
+When in doubt about whether an instruction phrasing is efficient, test it empirically before committing. Both `claude -p` and `codex exec` support JSON output that reveals tool call counts:
+
+```bash
+# Claude Code: stream-json + verbose shows each tool call
+claude -p "instruction here" --output-format stream-json --verbose 2>/dev/null > out.jsonl
+
+# Codex: --json shows command_execution events
+codex exec --json --full-auto "instruction here" > out.jsonl
+```
+
+This is worth doing for orchestration-heavy skills where instructions drive search or file discovery — a small phrasing change can produce a large difference in tool calls, latency, and token cost. Not every instruction needs benchmarking, but when the skill will run on every review or every plan, the cost compounds.
 
 ## Related
 
