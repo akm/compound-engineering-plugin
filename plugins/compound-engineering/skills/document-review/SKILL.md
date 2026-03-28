@@ -10,7 +10,9 @@ Review requirements or plan documents through multi-persona analysis. Dispatches
 
 ## Phase 0: Detect Mode
 
-Check the skill arguments or caller context for `mode:headless`. If present, set **headless mode** for the rest of the workflow.
+Check the skill arguments for `mode:headless`. Arguments may contain a document path, `mode:headless`, or both. Tokens starting with `mode:` are flags, not file paths -- strip them from the arguments and use the remaining token (if any) as the document path for Phase 1.
+
+If `mode:headless` is present, set **headless mode** for the rest of the workflow.
 
 **Headless mode** changes the interaction model, not the classification boundaries. Document-review still applies the same judgment about what is deterministic vs. what needs verification. The only difference is how non-auto findings are delivered:
 - `auto` fixes are applied silently (same as interactive)
@@ -30,7 +32,9 @@ If `mode:headless` is not present, the skill runs in its default interactive mod
 
 **If a document path is provided:** Read it, then proceed.
 
-**If no document is specified:** Ask which document to review, or find the most recent in `docs/brainstorms/` or `docs/plans/` using a file-search/glob tool (e.g., Glob in Claude Code).
+**If no document is specified (interactive mode):** Ask which document to review, or find the most recent in `docs/brainstorms/` or `docs/plans/` using a file-search/glob tool (e.g., Glob in Claude Code).
+
+**If no document is specified (headless mode):** Auto-resolve by finding the most recent file in `docs/brainstorms/` or `docs/plans/`. If no document is found, output "No document found to review." and return "Review complete" without dispatching agents.
 
 ### Classify Document Type
 
