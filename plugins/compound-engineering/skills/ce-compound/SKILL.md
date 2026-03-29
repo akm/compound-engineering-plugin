@@ -88,7 +88,8 @@ Launch these subagents IN PARALLEL. Each returns text data to the orchestrator.
    - Does not force bug-track fields onto knowledge-track learnings or vice versa
 
 #### 2. **Solution Extractor**
-   - Adapts output structure based on the problem_type track (bug vs knowledge)
+   - Reads `references/schema.yaml` for track classification (bug vs knowledge)
+   - Adapts output structure based on the problem_type track
    - Incorporates auto memory excerpts (if provided by the orchestrator) as supplementary evidence -- conversation history and the verified fix take priority; if memory notes contradict the conversation, note the contradiction as cautionary context
 
    **Bug track output sections:**
