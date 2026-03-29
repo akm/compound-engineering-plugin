@@ -163,10 +163,6 @@ If a reviewer flags any file in these directories for cleanup or removal, discar
 
 Compute the diff range, file list, and diff. Minimize permission prompts by combining into as few commands as possible.
 
-**Bot-PR eligibility check (PR path only):** When a PR number or GitHub URL is provided, check the PR author as part of fetching PR metadata. If the author is a known bot (`dependabot[bot]`, `renovate[bot]`, `github-actions[bot]`, `snyk-bot`):
-- **Headless/autofix:** Emit `Review skipped (headless mode). Reason: bot-authored PR (<author>). Bot PRs are mechanical dependency bumps.` followed by "Review complete". Stop — these modes are token-sensitive and bot PRs provide no value.
-- **Interactive/report-only:** Proceed normally. The user explicitly requested this review.
-
 **If `base:` argument is provided (fast path):**
 
 The caller already knows the diff base. Skip all base-branch detection, remote resolution, and merge-base computation. Use the provided value directly:
@@ -205,7 +201,7 @@ gh pr checkout <number-or-url>
 Then fetch PR metadata. Capture the base branch name and the PR base repository identity, not just the branch name:
 
 ```
-gh pr view <number-or-url> --json title,body,baseRefName,headRefName,url,author
+gh pr view <number-or-url> --json title,body,baseRefName,headRefName,url
 ```
 
 Use the repository portion of the returned PR URL as `<base-repo>` (for example, `EveryInc/compound-engineering-plugin` from `https://github.com/EveryInc/compound-engineering-plugin/pull/348`).
@@ -234,7 +230,7 @@ if [ -n "$PR_BASE_REF" ]; then BASE=$(git merge-base HEAD "$PR_BASE_REF" 2>/dev/
 if [ -n "$BASE" ]; then echo "BASE:$BASE" && echo "FILES:" && git diff --name-only $BASE && echo "DIFF:" && git diff -U10 $BASE && echo "UNTRACKED:" && git ls-files --others --exclude-standard; else echo "ERROR: Unable to resolve PR base branch <base> locally. Fetch the base branch and rerun so the review scope stays aligned with the PR."; fi
 ```
 
-Extract PR title/body, base branch, PR URL, and author from `gh pr view`, then extract the base marker, file list, diff content, and `UNTRACKED:` list from the local command. Do not use `gh pr diff` as the review scope after checkout -- it only reflects the remote PR state and will miss local fix commits until they are pushed. If the base ref still cannot be resolved from the PR's actual base repository after the fetch attempt, stop instead of falling back to `git diff HEAD`; a PR review without the PR base branch is incomplete.
+Extract PR title/body, base branch, and PR URL from `gh pr view`, then extract the base marker, file list, diff content, and `UNTRACKED:` list from the local command. Do not use `gh pr diff` as the review scope after checkout -- it only reflects the remote PR state and will miss local fix commits until they are pushed. If the base ref still cannot be resolved from the PR's actual base repository after the fetch attempt, stop instead of falling back to `git diff HEAD`; a PR review without the PR base branch is incomplete.
 
 **If a branch name is provided as an argument:**
 
