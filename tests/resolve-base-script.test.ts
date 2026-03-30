@@ -205,13 +205,19 @@ describe("resolve-base.sh", () => {
 
     const checkoutRoot = await fs.mkdtemp(path.join(os.tmpdir(), "resolve-base-checkout-"))
     await runCommand(["git", "clone", "--depth", "1", bareUrl, checkoutRoot], os.tmpdir(), gitEnv)
-    await runGit(["fetch", "--depth", "1", "origin", "main:refs/remotes/origin/main"], checkoutRoot)
-    await runGit(["fetch", "--depth", "1", "origin", "feature"], checkoutRoot)
+    await runGit(["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], checkoutRoot)
+    await runGit(
+      ["fetch", "--depth", "1", "origin", "main:refs/remotes/origin/main", "feature:refs/remotes/origin/feature"],
+      checkoutRoot,
+    )
     await runGit(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], checkoutRoot)
-    await runGit(["checkout", "--detach", featureSha], checkoutRoot)
+    await runGit(["checkout", "--detach", "origin/feature"], checkoutRoot)
 
     const originMain = await runGit(["rev-parse", "--verify", "origin/main"], checkoutRoot)
     expect(originMain).toBe(mainSha)
+
+    const originFeature = await runGit(["rev-parse", "--verify", "origin/feature"], checkoutRoot)
+    expect(originFeature).toBe(featureSha)
 
     const originHead = await runGit(
       ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
