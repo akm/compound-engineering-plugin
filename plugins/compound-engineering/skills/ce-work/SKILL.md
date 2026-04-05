@@ -22,6 +22,8 @@ This command takes a work document (plan, specification, or todo file) or a bare
 
 Determine how to proceed based on what was provided in `<input_document>`.
 
+**Plan Issue** (input is a GitHub Issue number like `#123` or `123`) → Read the parent Issue with `gh issue view <number> --json title,body,labels`. Verify it has the `plan` label. Extract child Issue numbers from the `## Implementation Units` task list (pattern: `- [ ] #<number>`). Read each child Issue with `gh issue view <child_number> --json title,body,state`. Skip to Phase 1.
+
 **Plan document** (input is a file path to an existing plan, specification, or todo file) → skip to Phase 1.
 
 **Bare prompt** (input is a description of work, not a file path):
@@ -46,7 +48,8 @@ Determine how to proceed based on what was provided in `<input_document>`.
 
 1. **Read Plan and Clarify** _(skip if arriving from Phase 0 with a bare prompt)_
 
-   - Read the work document completely
+   - **If the input is a Plan Issue:** Read the parent Issue body (`gh issue view <number> --json body --jq '.body'`) and each child Issue body. The parent Issue contains the overall plan (Overview, Problem Frame, Requirements Trace, Scope Boundaries, Key Technical Decisions, etc.). Each child Issue is an Implementation Unit (Goal, Files, Approach, Test scenarios, Verification, etc.).
+   - **If the input is a plan file:** Read the work document completely.
    - Treat the plan as a decision artifact, not an execution script
    - If the plan includes sections such as `Implementation Units`, `Work Breakdown`, `Requirements Trace`, `Files`, `Test Scenarios`, or `Verification`, use those as the primary source material for execution
    - Check for `Execution note` on each implementation unit — these carry the plan's execution posture signal for that unit (for example, test-first or characterization-first). Note them when creating tasks.
@@ -161,6 +164,8 @@ Determine how to proceed based on what was provided in `<input_document>`.
      - Run tests after changes
      - Assess testing coverage: did this task change behavior? If yes, were tests written or updated? If no tests were added, is the justification deliberate (e.g., pure config, no behavioral change)?
      - Mark task as completed
+     - If working from a Plan Issue, close the corresponding child Issue: `gh issue close <child_number>`
+     - Check the parent Issue task list checkbox for this unit: update the parent Issue body via `gh issue edit` to change `- [ ] #<child_number>` to `- [x] #<child_number>`
      - Evaluate for incremental commit (see below)
    ```
 
@@ -361,7 +366,8 @@ Determine how to proceed based on what was provided in `<input_document>`.
 
 3. **Update Plan Status**
 
-   If the input document has YAML frontmatter with a `status` field, update it to `completed`:
+   - **If the input was a Plan Issue:** Close the parent Issue: `gh issue close <parent_number>`. All child Issues should already be closed during Phase 2 execution.
+   - **If the input was a plan file** with YAML frontmatter with a `status` field, update it to `completed`:
    ```
    status: active  →  status: completed
    ```
