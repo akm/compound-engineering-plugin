@@ -178,7 +178,7 @@ Specific conflict patterns:
 
 Scan `present` findings for codebase-pattern-resolved auto-eligibility. Promote `present` -> `auto` when **all three** conditions are met:
 
-1. The finding cites a specific existing codebase pattern in its evidence -- not just "best practice" or "convention," but a concrete pattern with a file, function, or usage reference
+1. The finding's `why_it_matters` cites a specific existing codebase pattern -- not just "best practice" or "convention," but a concrete pattern with a file, function, or usage reference
 2. The finding includes a concrete `suggested_fix` that follows that cited pattern
 3. There is no genuine tradeoff -- the codebase context resolves any ambiguity about which approach to use
 
