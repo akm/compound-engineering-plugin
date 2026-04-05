@@ -58,20 +58,21 @@ A plan is ready when an implementer can start confidently without needing the pl
 
 #### 0.1 Resume Existing Plan Work When Appropriate
 
-If the user references an existing plan file or there is an obvious recent matching plan in `docs/plans/`:
-- Read it
+If the user references an existing plan Issue number or there is an obvious recent matching plan Issue:
+- Search for existing plan Issues: `gh issue list --label plan --state open --json number,title,createdAt --jq '.[] | "\(.number) \(.title) \(.createdAt)"'`
+- Read the matching parent Issue: `gh issue view <number> --json title,body,labels`
 - Confirm whether to update it in place or create a new plan
 - If updating, preserve completed checkboxes and revise only the still-relevant sections
 
-**Deepen intent:** The word "deepen" (or "deepening") in reference to a plan is the primary trigger for the deepening fast path. When the user says "deepen the plan", "deepen my plan", "run a deepening pass", or similar, the target document is a **plan** in `docs/plans/`, not a requirements document. Use any path, keyword, or context the user provides to identify the right plan. If a path is provided, verify it is actually a plan document. If the match is not obvious, confirm with the user before proceeding.
+**Deepen intent:** The word "deepen" (or "deepening") in reference to a plan is the primary trigger for the deepening fast path. When the user says "deepen the plan", "deepen my plan", "run a deepening pass", or similar, the target is a **plan Issue** with the `plan` label. Use any Issue number, keyword, or context the user provides to identify the right plan. If an Issue number is provided, verify it has the `plan` label. If the match is not obvious, confirm with the user before proceeding.
 
 Words like "strengthen", "confidence", "gaps", and "rigor" are NOT sufficient on their own to trigger deepening. These words appear in normal editing requests ("strengthen that section about the diagram", "there are gaps in the test scenarios") and should not cause a holistic deepening pass. Only treat them as deepening intent when the request clearly targets the plan as a whole and does not name a specific section or content area to change — and even then, prefer to confirm with the user before entering the deepening flow.
 
-Once the plan is identified and appears complete (all major sections present, implementation units defined, `status: active`), short-circuit to Phase 5.3 (Confidence Check and Deepening) in **interactive mode**. This avoids re-running the full planning workflow and gives the user control over which findings are integrated.
+Once the plan Issue is identified and appears complete (all major sections present, implementation units defined as child Issues, state is `open`), short-circuit to Phase 5.3 (Confidence Check and Deepening) in **interactive mode**. This avoids re-running the full planning workflow and gives the user control over which findings are integrated.
 
 Normal editing requests (e.g., "update the test scenarios", "add a new implementation unit", "strengthen the risk section") should NOT trigger the fast path — they follow the standard resume flow.
 
-If the plan already has a `deepened: YYYY-MM-DD` frontmatter field and there is no explicit user request to re-deepen, the fast path still applies the same confidence-gap evaluation — it does not force deepening.
+If the plan Issue body already contains a `deepened: YYYY-MM-DD` line and there is no explicit user request to re-deepen, the fast path still applies the same confidence-gap evaluation — it does not force deepening.
 
 #### 0.2 Find Upstream Requirements Document
 
@@ -273,16 +274,15 @@ Ask the user only when the answer materially affects architecture, scope, sequen
 
 ### Phase 3: Structure the Plan
 
-#### 3.1 Title and File Naming
+#### 3.1 Title and Label Design
 
-- Draft a clear, searchable title using conventional format such as `feat: Add user authentication` or `fix: Prevent checkout double-submit`
+- Draft a clear, searchable title using conventional format: `[Plan] <type>: <descriptive title>`
+  - Examples: `[Plan] feat: Add user authentication flow`, `[Plan] fix: Prevent checkout double-submit`
 - Determine the plan type: `feat`, `fix`, or `refactor`
-- Build the filename following the repository convention: `docs/plans/YYYY-MM-DD-NNN-<type>-<descriptive-name>-plan.md`
-  - Create `docs/plans/` if it does not exist
-  - Check existing files for today's date to determine the next sequence number (zero-padded to 3 digits, starting at 001)
-  - Keep the descriptive name concise (3-5 words) and kebab-cased
-  - Examples: `2026-01-15-001-feat-user-authentication-flow-plan.md`, `2026-02-03-002-fix-checkout-race-condition-plan.md`
-  - Avoid: missing sequence numbers, vague names like "new-feature", invalid characters (colons, spaces)
+- Labels:
+  - Parent Issue: `plan` label
+  - Child Issues (Implementation Units): `plan-unit` label
+  - Both parent and child Issues share the plan type as an additional label (e.g., `feat`, `fix`, `refactor`)
 
 #### 3.2 Stakeholder and Impact Awareness
 
@@ -613,34 +613,150 @@ If the plan originated from a requirements document, re-read that document and v
 - Blocking questions were either resolved, explicitly assumed, or sent back to `ce:brainstorm`
 - Every section of the origin document is addressed in the plan — scan each section to confirm nothing was silently dropped
 
-#### 5.2 Write Plan File
+#### 5.2 Create Plan Issues
 
-**REQUIRED: Write the plan file to disk before presenting any options.**
+**REQUIRED: Create plan Issues before presenting any options.**
 
-Use the Write tool to save the complete plan to:
+Create Issues in the following order:
 
-```text
-docs/plans/YYYY-MM-DD-NNN-<type>-<descriptive-name>-plan.md
+**Step 1: Create child Issues (one per Implementation Unit)**
+
+For each Implementation Unit, create a child Issue:
+
+```bash
+gh issue create \
+  --title "Unit N: <unit name>" \
+  --label "plan-unit" --label "<type>" \
+  --body "$(cat <<'EOF'
+Parent: (will be linked after parent creation)
+
+## Goal
+<what this unit accomplishes>
+
+## Requirements
+<which requirements or success criteria it advances>
+
+## Dependencies
+<None / #<unit issue number> / external prerequisite>
+
+## Files
+- Create: `path/to/new_file`
+- Modify: `path/to/existing_file`
+- Test: `path/to/test_file`
+
+## Approach
+- <key design or sequencing decision>
+
+## Execution note
+<optional: test-first, characterization-first, external-delegate>
+
+## Patterns to follow
+- <existing file, class, or pattern>
+
+## Test scenarios
+- <scenario: specific input/action -> expected outcome>
+
+## Verification
+- <outcome that should hold when this unit is complete>
+EOF
+)"
+```
+
+Record each child Issue number as it is created.
+
+**Step 2: Create the parent Issue**
+
+Create the parent Issue with references to all child Issues in a task list:
+
+```bash
+gh issue create \
+  --title "[Plan] <type>: <descriptive title>" \
+  --label "plan" --label "<type>" \
+  --body "$(cat <<'EOF'
+## Overview
+<what is changing and why>
+
+## Problem Frame
+<user/business problem and context>
+
+## Requirements Trace
+- R1. <requirement or success criterion>
+
+## Scope Boundaries
+- <explicit non-goal or exclusion>
+
+## Context & Research
+### Relevant Code and Patterns
+- <existing file, class, component, or pattern>
+
+### Institutional Learnings
+- <relevant docs/solutions/ insight>
+
+### External References
+- <relevant external docs, if used>
+
+## Key Technical Decisions
+- <decision>: <rationale>
+
+## Open Questions
+### Resolved During Planning
+- <question>: <resolution>
+
+### Deferred to Implementation
+- <question or unknown>: <why deferred>
+
+## Implementation Units
+- [ ] #<child1> Unit 1: <name> — <goal summary>
+- [ ] #<child2> Unit 2: <name> — <goal summary>
+- [ ] #<child3> Unit 3: <name> — <goal summary>
+
+## System-Wide Impact
+- **Interaction graph:** <callbacks, middleware, observers affected>
+- **Error propagation:** <how failures travel across layers>
+- **State lifecycle risks:** <partial-write, cache, cleanup concerns>
+
+## Risks & Dependencies
+| Risk | Mitigation |
+|------|------------|
+| <risk> | <how addressed> |
+
+## Documentation / Operational Notes
+- <docs, rollout, monitoring impacts>
+
+## Sources & References
+- Origin document: <path or link>
+- Related code: <path or symbol>
+- Related PRs/issues: #<number>
+EOF
+)"
+```
+
+**Step 3: Update child Issues with parent reference**
+
+For each child Issue, update the body to replace the placeholder parent reference:
+
+```bash
+gh issue view <child_number> --json body --jq '.body' | sed "s/Parent: (will be linked after parent creation)/Parent: #<parent_number>/" | gh issue edit <child_number> --body-file -
 ```
 
 Confirm:
 
 ```text
-Plan written to docs/plans/[filename]
+Plan created as Issue #<parent_number> with <N> unit Issues (#<child1>, #<child2>, ...)
 ```
 
-**Pipeline mode:** If invoked from an automated workflow such as LFG, SLFG, or any `disable-model-invocation` context, skip interactive questions. Make the needed choices automatically and proceed to writing the plan.
+**Pipeline mode:** If invoked from an automated workflow such as LFG, SLFG, or any `disable-model-invocation` context, skip interactive questions. Make the needed choices automatically and proceed to creating Issues.
 
 #### 5.3 Confidence Check and Deepening
 
-After writing the plan file, automatically evaluate whether the plan needs strengthening.
+After creating the plan Issues, automatically evaluate whether the plan needs strengthening.
 
 **Two deepening modes:**
 
-- **Auto mode** (default during plan generation): Runs without asking the user for approval. The user sees what is being strengthened but does not need to make a decision. Sub-agent findings are synthesized directly into the plan.
-- **Interactive mode** (activated by the re-deepen fast path in Phase 0.1): The user explicitly asked to deepen an existing plan. Sub-agent findings are presented individually for review before integration. The user can accept, reject, or discuss each agent's findings. Only accepted findings are synthesized into the plan.
+- **Auto mode** (default during plan generation): Runs without asking the user for approval. The user sees what is being strengthened but does not need to make a decision. Sub-agent findings are synthesized directly into the plan Issues (parent and/or child Issues are updated via `gh issue edit`).
+- **Interactive mode** (activated by the re-deepen fast path in Phase 0.1): The user explicitly asked to deepen an existing plan. Sub-agent findings are presented individually for review before integration. The user can accept, reject, or discuss each agent's findings. Only accepted findings are synthesized into the plan Issues.
 
-Interactive mode exists because on-demand deepening is a different user posture — the user already has a plan they are invested in and wants to be surgical about what changes. This applies whether the plan was generated by this skill, written by hand, or produced by another tool.
+Interactive mode exists because on-demand deepening is a different user posture — the user already has a plan they are invested in and wants to be surgical about what changes. This applies whether the plan was generated by this skill, created manually as Issues, or produced by another tool.
 
 `document-review` and this confidence check are different:
 - Use the `document-review` skill when the document needs clarity, simplification, completeness, or scope control
