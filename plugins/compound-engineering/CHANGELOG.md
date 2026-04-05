@@ -9,6 +9,14 @@ All notable changes to the compound-engineering plugin will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.62.1](https://github.com/EveryInc/compound-engineering-plugin/compare/compound-engineering-v2.62.0...compound-engineering-v2.62.1) (2026-04-05)
+
+
+### Bug Fixes
+
+* **document-review:** promote pattern-resolved findings to auto ([#507](https://github.com/EveryInc/compound-engineering-plugin/issues/507)) ([b223e39](https://github.com/EveryInc/compound-engineering-plugin/commit/b223e39a6374566fcc4ae269811d62a2e97c4827))
+* **document-review:** reduce token cost and latency ([#509](https://github.com/EveryInc/compound-engineering-plugin/issues/509)) ([9da73a6](https://github.com/EveryInc/compound-engineering-plugin/commit/9da73a60919bfc025efc2ca8b4000c45a7a27b42))
+
 ## [2.62.0](https://github.com/EveryInc/compound-engineering-plugin/compare/compound-engineering-v2.61.0...compound-engineering-v2.62.0) (2026-04-03)
 
 
